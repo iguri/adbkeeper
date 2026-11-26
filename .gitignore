@@ -1,0 +1,11 @@
+# 本机与构建产物
+local.properties
+.gradle/
+.kotlin/
+.idea/
+*.iml
+build/
+**/build/
+*.apk
+*.keystore
+.DS_Store
