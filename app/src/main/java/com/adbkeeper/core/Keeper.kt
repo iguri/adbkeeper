@@ -28,6 +28,8 @@ data class ItemStatus(
     val key: String,
     val raw: String?,
     val ok: Boolean,
+    /** 已写入但回读仍不符：该 ROM 拦截了这个 key。 */
+    val writtenButIgnored: Boolean = false,
 )
 
 data class Snapshot(
@@ -36,15 +38,22 @@ data class Snapshot(
 ) {
     val allOk: Boolean get() = hasPermission && items.all { it.ok }
     val brokenCount: Int get() = if (hasPermission) items.count { !it.ok } else items.size
+    val ignoredKeys: List<String> get() = items.filter { it.writtenButIgnored }.map { it.key }
 }
 
 data class EnforceResult(
     val hasPermission: Boolean,
     val fixed: List<String>,
     val error: String?,
+    /** 写了但回读仍不符的 key，用于给出针对性提示。 */
+    val verifyFailures: List<String> = emptyList(),
 )
 
 object Keeper {
+
+    /** 最近一次 enforce 中"写入但回读未生效"的 key，供 UI 给出针对性提示。 */
+    @Volatile
+    private var lastIgnored: Set<String> = emptySet()
 
     fun hasWritePermission(context: Context): Boolean =
         context.checkSelfPermission(Manifest.permission.WRITE_SECURE_SETTINGS) ==
@@ -59,6 +68,7 @@ object Keeper {
 
     fun snapshot(context: Context): Snapshot {
         val resolver = context.contentResolver
+        val ignored = lastIgnored
         val dev = rawValue(resolver, SettingKeys.DEVELOPMENT_SETTINGS_ENABLED)
         val wifi = rawValue(resolver, SettingKeys.ADB_WIFI_ENABLED)
         val timeout = rawValue(resolver, SettingKeys.ADB_ALLOWED_CONNECTION_TIME)
@@ -70,18 +80,21 @@ object Keeper {
                     key = SettingKeys.DEVELOPMENT_SETTINGS_ENABLED,
                     raw = dev,
                     ok = dev?.trim()?.toIntOrNull() == 1,
+                    writtenButIgnored = SettingKeys.DEVELOPMENT_SETTINGS_ENABLED in ignored,
                 ),
                 ItemStatus(
                     label = "无线调试",
                     key = SettingKeys.ADB_WIFI_ENABLED,
                     raw = wifi,
                     ok = wifi?.trim()?.toIntOrNull() == 1,
+                    writtenButIgnored = SettingKeys.ADB_WIFI_ENABLED in ignored,
                 ),
                 ItemStatus(
                     label = "adb 授权不过期",
                     key = SettingKeys.ADB_ALLOWED_CONNECTION_TIME,
                     raw = timeout,
                     ok = timeout?.trim()?.toLongOrNull() == 0L,
+                    writtenButIgnored = SettingKeys.ADB_ALLOWED_CONNECTION_TIME in ignored,
                 ),
             ),
         )
@@ -131,6 +144,37 @@ object Keeper {
         if (fixed.isNotEmpty()) {
             Logs.i("Keeper", "已修复：${fixed.joinToString("、")}")
         }
-        return EnforceResult(true, fixed, error)
+        val verifyFailures = verify(resolver)
+        lastIgnored = verifyFailures.toSet()
+        if (verifyFailures.isNotEmpty()) {
+            Logs.i("Keeper", "写入后回读未生效：${verifyFailures.joinToString("、")}（ROM 可能拦截）")
+        }
+        return EnforceResult(true, fixed, error, verifyFailures)
+    }
+
+    /** 回读校验：写入后仍不符合目标值的 key。 */
+    private fun verify(resolver: ContentResolver): List<String> {
+        val failures = mutableListOf<String>()
+        if (rawValue(resolver, SettingKeys.DEVELOPMENT_SETTINGS_ENABLED)?.trim()?.toIntOrNull() != 1) {
+            failures += SettingKeys.DEVELOPMENT_SETTINGS_ENABLED
+        }
+        if (rawValue(resolver, SettingKeys.ADB_WIFI_ENABLED)?.trim()?.toIntOrNull() != 1) {
+            failures += SettingKeys.ADB_WIFI_ENABLED
+        }
+        if (rawValue(resolver, SettingKeys.ADB_ALLOWED_CONNECTION_TIME)?.trim()?.toLongOrNull() != 0L) {
+            failures += SettingKeys.ADB_ALLOWED_CONNECTION_TIME
+        }
+        return failures
+    }
+
+    /** 针对被 ROM 拦截的 key 给出可执行提示。 */
+    fun hintFor(key: String): String = when (key) {
+        SettingKeys.DEVELOPMENT_SETTINGS_ENABLED ->
+            "该 ROM 拒绝由应用开启开发者选项，请手动在设置中开启一次"
+        SettingKeys.ADB_WIFI_ENABLED ->
+            "该 ROM 拒绝由应用开启无线调试，请用磁贴或系统设置手动开启"
+        SettingKeys.ADB_ALLOWED_CONNECTION_TIME ->
+            "该 ROM 没有此设置的 UI 入口，只能通过电脑 adb 写入 0"
+        else -> "该 ROM 拦截了此项写入"
     }
 }

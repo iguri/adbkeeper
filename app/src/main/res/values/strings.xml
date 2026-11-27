@@ -1,4 +1,80 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">无线调试助手</string>
+
+    <!-- 模式 -->
+    <string name="mode_session">即开即用</string>
+    <string name="mode_persistent">常驻</string>
+    <string name="mode_hint_session">退出应用或划掉后台卡片自动还原</string>
+    <string name="mode_hint_persistent">前台服务维持，直到手动停止</string>
+
+    <!-- 主界面 -->
+    <string name="btn_start">一键开启无线调试</string>
+    <string name="btn_stop">结束并还原设置</string>
+    <string name="btn_busy">正在处理…</string>
+    <string name="btn_grant_hint">先复制下方授权命令到电脑执行，再点上方按钮</string>
+    <string name="btn_start_hint">点一下即可开启，退出应用后自动还原</string>
+    <string name="hint_keeping">保持中：退出应用或划掉后台卡片会自动还原</string>
+    <string name="hint_keeping_persistent">常驻中：点「结束并还原设置」才会停止</string>
+    <string name="hint_restoring">正在恢复被关闭的设置…</string>
+    <string name="hint_rom_blocked">该 ROM 拦截了写入：%1$s</string>
+    <string name="cd_mode_switch">切换维持模式</string>
+    <string name="cd_copy_command">复制命令</string>
+    <string name="cd_main_button">开启或结束无线调试</string>
+
+    <!-- 设置 -->
+    <string name="settings_notify">开启成功后推送连接信息</string>
+    <string name="settings_channel">通知渠道</string>
+    <string name="settings_custom_port">自定义端口</string>
+    <string name="settings_session_limit">会话自动结束</string>
+    <string name="settings_export_log">导出诊断日志</string>
+    <string name="settings_battery">加入电池优化白名单</string>
+    <string name="settings_battery_on">已在白名单</string>
+
+    <!-- 引导 -->
+    <string name="onboarding_title">三步完成配置</string>
+    <string name="onboarding_step1">打开开发者选项</string>
+    <string name="onboarding_step1_desc">设置 → 关于本机 → 版本信息，连点「版本号」7 次，按提示输入锁屏密码。</string>
+    <string name="onboarding_step2">打开无线调试</string>
+    <string name="onboarding_step2_desc">开发者选项 → 无线调试。若列表里没有，先确认开发者选项总开关已打开。</string>
+    <string name="onboarding_step3">授予写设置权限</string>
+    <string name="onboarding_step3_desc">两种方式任选其一：电脑执行 adb 命令，或在下方走本机配对。</string>
+    <string name="onboarding_step4">确认就绪</string>
+    <string name="onboarding_step4_desc">三项都显示「开」即可开始使用。</string>
+    <string name="onboarding_open_dev">直达开发者选项</string>
+    <string name="onboarding_open_wireless">直达无线调试</string>
+    <string name="onboarding_copy">复制</string>
+    <string name="onboarding_finish">完成</string>
+    <string name="onboarding_later">稍后再说</string>
+    <string name="onboarding_compat_title">ColorOS 找不到「禁止权限监控」？</string>
+    <string name="onboarding_compat_body">ColorOS 16 起中文界面会隐藏该开关。把系统语言临时切换为 English，再进入开发者选项，接近底部找到 Disable system optimization（旧版为 Disable permission monitoring）并打开，选允许。完成后可以切回中文，已授予的权限不受影响。</string>
+    <string name="onboarding_compat_locale">切换系统语言</string>
+    <string name="onboarding_battery">把应用加入电池优化白名单，避免系统清理后台</string>
+    <string name="onboarding_battery_on">已在电池优化白名单</string>
+
+    <!-- 配对 -->
+    <string name="pairing_pc_title">方式一：电脑 ADB</string>
+    <string name="pairing_local_title">方式二：本机配对</string>
+    <string name="pairing_local_desc">在系统「使用配对码配对设备」页面获取六位码后填入，应用会尝试在本机建立 adb 连接并自动授权。</string>
+    <string name="pairing_local_code">六位配对码</string>
+    <string name="pairing_local_run">开始配对</string>
+    <string name="pairing_local_unavailable">当前版本暂不支持本机配对，请使用电脑 ADB</string>
+    <string name="pairing_usb_hint">已检测到 USB 调试，可在电脑执行上面的命令</string>
+
+    <!-- 磁贴 / 小组件 -->
+    <string name="tile_label">无线调试</string>
+    <string name="tile_start">开启</string>
+    <string name="tile_stop">结束</string>
+    <string name="widget_desc">一键开启或结束无线调试</string>
+    <string name="widget_title">无线调试</string>
+
+    <!-- 更新 -->
+    <string name="update_check">检查更新</string>
+    <string name="update_open_browser">去 Release 页面下载</string>
+
+    <!-- 快捷方式 -->
+    <string name="shortcut_start_short">开启无线调试</string>
+    <string name="shortcut_start_long">开启无线调试并保持</string>
+    <string name="shortcut_stop_short">结束并还原</string>
+    <string name="shortcut_stop_long">结束会话并还原设置</string>
 </resources>

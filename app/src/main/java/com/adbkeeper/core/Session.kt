@@ -93,6 +93,27 @@ object Session {
         return ok
     }
 
+    /** 常驻模式复用同一份原始值存储：启用前记录，关闭时还原。 */
+    fun captureOriginals(context: Context): Map<String, String?> {
+        val app = context.applicationContext
+        val captured = SettingKeys.all.associateWith { key ->
+            Keeper.rawValue(app.contentResolver, key)
+        }
+        originals = captured
+        Prefs.saveOriginals(app, captured)
+        Logs.i(TAG, "记录原始值（常驻模式）：$captured")
+        return captured
+    }
+
+    /** 常驻模式关闭：还原并清空记录，不触碰会话服务。 */
+    fun restoreAndClear(context: Context): Boolean {
+        val app = context.applicationContext
+        val ok = restore(app)
+        originals = emptyMap()
+        Prefs.clearOriginals(app)
+        return ok
+    }
+
     /** 距会话结束的剩余秒数，未限时返回 null。 */
     fun remainingSeconds(context: Context): Long? {
         if (!active) return null
@@ -115,7 +136,7 @@ object Session {
 
     private fun enforceNow(context: Context) {
         if (!active) return
-        val result = Keeper.enforce(context)
+        val result = EnforceCoordinator.enforce(context, "session")
         if (!result.hasPermission) {
             Logs.i(TAG, "缺少写设置权限，请先执行界面上的授权命令")
         }

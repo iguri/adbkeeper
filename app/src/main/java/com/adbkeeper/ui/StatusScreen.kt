@@ -51,6 +51,9 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
@@ -61,11 +64,16 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.repeatOnLifecycle
 import com.adbkeeper.BuildConfig
+import com.adbkeeper.R
 import com.adbkeeper.core.AdbLink
 import com.adbkeeper.core.AdbPort
 import com.adbkeeper.core.Channel
 import com.adbkeeper.core.ItemStatus
+import com.adbkeeper.core.BatteryWhitelist
+import com.adbkeeper.core.DiagnosticExport
 import com.adbkeeper.core.Keeper
+import com.adbkeeper.core.ModeController
+import com.adbkeeper.tile.KeeperTileService
 import com.adbkeeper.core.Logs
 import com.adbkeeper.core.NetInfo
 import com.adbkeeper.core.Notifier
@@ -92,7 +100,8 @@ fun StatusScreen() {
     val scope = rememberCoroutineScope()
 
     var snapshot by remember { mutableStateOf(Keeper.snapshot(context)) }
-    var sessionActive by remember { mutableStateOf(Session.active) }
+    var mode by remember { mutableStateOf(ModeController.mode(context)) }
+    var sessionActive by remember { mutableStateOf(ModeController.active(context)) }
     var detectedPort by remember { mutableStateOf<String?>(null) }
     var ipv4 by remember { mutableStateOf<String?>(null) }
     var ipv6 by remember { mutableStateOf<String?>(null) }
@@ -129,7 +138,8 @@ fun StatusScreen() {
 
     val refresh: suspend () -> Unit = {
         snapshot = withContext(Dispatchers.IO) { Keeper.snapshot(context) }
-        sessionActive = Session.active
+        mode = ModeController.mode(context)
+        sessionActive = ModeController.active(context)
         val wifiNow = snapshot.items.firstOrNull { it.key == SettingKeys.ADB_WIFI_ENABLED }?.ok == true
         if (sessionActive || wifiNow) {
             val custom = customPort.trim().toIntOrNull()?.takeIf { it in 1..65535 }
@@ -161,7 +171,8 @@ fun StatusScreen() {
                 sessionActive -> {
                     val canRestore = snapshot.hasPermission
                     busy = true
-                    Session.stop(context, restore = true)
+                    ModeController.stop(context, restore = true)
+                    KeeperTileService.refresh(context)
                     scope.launch {
                         delay(400)
                         refresh()
@@ -179,14 +190,36 @@ fun StatusScreen() {
                 else -> {
                     busy = true
                     AdbPort.invalidate()
-                    Session.start(context)
+                    ModeController.start(context)
+                    KeeperTileService.refresh(context)
                     scope.launch {
                         delay(1500)
                         refresh()
                         busy = false
                     }
-                    Toast.makeText(context, "已开启，退出应用后自动还原", Toast.LENGTH_LONG).show()
+                    Toast.makeText(
+                        context,
+                        if (mode == ModeController.Mode.PERSISTENT) {
+                            "常驻已开启，关闭前会一直维持"
+                        } else {
+                            "已开启，退出应用后自动还原"
+                        },
+                        Toast.LENGTH_LONG,
+                    ).show()
                 }
+            }
+        }
+    }
+
+    val onSwitchMode: (ModeController.Mode) -> Unit = { target ->
+        if (!busy && target != mode) {
+            busy = true
+            ModeController.switchMode(context, target)
+            KeeperTileService.refresh(context)
+            scope.launch {
+                delay(800)
+                refresh()
+                busy = false
             }
         }
     }
@@ -226,7 +259,10 @@ fun StatusScreen() {
                 )
             }
 
-            Spacer(Modifier.height(16.dp))
+            Spacer(Modifier.height(14.dp))
+            ModeSelector(current = mode, active = sessionActive, onSelect = onSwitchMode)
+
+            Spacer(Modifier.height(14.dp))
             StatusTiles(snapshot)
 
             Spacer(Modifier.height(18.dp))
@@ -249,9 +285,9 @@ fun StatusScreen() {
             ) {
                 Text(
                     when {
-                        busy -> "正在处理…"
-                        sessionActive -> "结束并还原设置"
-                        else -> "一键开启无线调试"
+                        busy -> stringResource(R.string.btn_busy)
+                        sessionActive -> stringResource(R.string.btn_stop)
+                        else -> stringResource(R.string.btn_start)
                     },
                     fontSize = 20.sp,
                     fontWeight = FontWeight.Bold,
@@ -260,7 +296,7 @@ fun StatusScreen() {
 
             Spacer(Modifier.height(10.dp))
             Text(
-                hintText(snapshot, sessionActive, Session.remainingSeconds(context)),
+                hintText(snapshot, sessionActive, mode, Session.remainingSeconds(context)),
                 modifier = Modifier.padding(horizontal = 4.dp),
                 fontSize = 12.sp,
                 lineHeight = 18.sp,
@@ -324,6 +360,16 @@ fun StatusScreen() {
                 onOpenLog = {
                     logText = Logs.dump()
                     showLog = true
+                },
+                batteryOk = BatteryWhitelist.isIgnoring(context),
+                onBattery = { BatteryWhitelist.requestExemption(context) },
+                onExportLog = {
+                    val ok = DiagnosticExport.export(context)
+                    Toast.makeText(
+                        context,
+                        if (ok) "已生成诊断文件" else "导出失败，请查看日志",
+                        Toast.LENGTH_SHORT,
+                    ).show()
                 },
             )
 
@@ -402,6 +448,69 @@ private fun Panel(content: @Composable ColumnScope.() -> Unit) {
         modifier = Modifier.fillMaxWidth(),
     ) {
         Column(Modifier.padding(horizontal = 16.dp, vertical = 14.dp), content = content)
+    }
+}
+
+@Composable
+private fun ModeSelector(
+    current: ModeController.Mode,
+    active: Boolean,
+    onSelect: (ModeController.Mode) -> Unit,
+) {
+    val kc = LocalKeeper.current
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(14.dp))
+            .background(MaterialTheme.colorScheme.surfaceVariant)
+            .padding(4.dp)
+            .semantics { contentDescription = "切换维持模式" },
+        horizontalArrangement = Arrangement.spacedBy(4.dp),
+    ) {
+        ModeController.Mode.entries.forEach { item ->
+            val selected = item == current
+            Surface(
+                color = if (selected) MaterialTheme.colorScheme.surface else Color.Transparent,
+                shape = RoundedCornerShape(10.dp),
+                modifier = Modifier
+                    .weight(1f)
+                    .clickable { onSelect(item) },
+            ) {
+                Column(
+                    Modifier.padding(vertical = 6.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                ) {
+                    Text(
+                        if (item == ModeController.Mode.SESSION) {
+                            stringResource(R.string.mode_session)
+                        } else {
+                            stringResource(R.string.mode_persistent)
+                        },
+                        fontSize = 13.sp,
+                        fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal,
+                        color = if (selected) kc.ok else MutedText,
+                    )
+                }
+            }
+        }
+    }
+    Text(
+        if (current == ModeController.Mode.PERSISTENT) {
+            stringResource(R.string.mode_hint_persistent)
+        } else {
+            stringResource(R.string.mode_hint_session)
+        },
+        modifier = Modifier.padding(top = 6.dp, start = 4.dp),
+        fontSize = 11.sp,
+        color = MutedText,
+    )
+    if (active) {
+        Text(
+            "切换模式会先停止当前维持并还原设置",
+            modifier = Modifier.padding(start = 4.dp),
+            fontSize = 11.sp,
+            color = WarnText,
+        )
     }
 }
 
@@ -603,6 +712,9 @@ private fun SettingsPanel(
     onCustomPortChange: (String) -> Unit,
     onTestNotify: () -> Unit,
     onOpenLog: () -> Unit,
+    batteryOk: Boolean,
+    onBattery: () -> Unit,
+    onExportLog: () -> Unit,
 ) {
     val kc = LocalKeeper.current
     Surface(
@@ -702,6 +814,50 @@ private fun SettingsPanel(
                 )
                 Spacer(Modifier.weight(1f))
                 TextButton(onClick = onOpenLog) { Text("查看", fontSize = 12.sp) }
+            }
+
+            HorizontalDivider(Modifier.padding(horizontal = 16.dp), color = kc.hairline)
+
+            Row(
+                Modifier.fillMaxWidth().padding(start = 16.dp, end = 8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Column(Modifier.weight(1f)) {
+                    Text(
+                        stringResource(R.string.settings_export_log),
+                        fontSize = 14.sp,
+                        color = MaterialTheme.colorScheme.onSurface,
+                    )
+                    Text("打包机型、权限状态与最近日志", fontSize = 11.sp, color = MutedText)
+                }
+                TextButton(onClick = onExportLog) { Text("导出", fontSize = 12.sp) }
+            }
+
+            HorizontalDivider(Modifier.padding(horizontal = 16.dp), color = kc.hairline)
+
+            Row(
+                Modifier.fillMaxWidth().padding(start = 16.dp, end = 8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Column(Modifier.weight(1f)) {
+                    Text(
+                        stringResource(R.string.settings_battery),
+                        fontSize = 14.sp,
+                        color = MaterialTheme.colorScheme.onSurface,
+                    )
+                    Text(
+                        if (batteryOk) {
+                            stringResource(R.string.settings_battery_on)
+                        } else {
+                            "常驻模式建议加入，避免被系统清理"
+                        },
+                        fontSize = 11.sp,
+                        color = MutedText,
+                    )
+                }
+                TextButton(onClick = onBattery) {
+                    Text(if (batteryOk) "查看" else "去设置", fontSize = 12.sp)
+                }
             }
         }
     }
@@ -923,10 +1079,14 @@ private fun AboutScreen(onBack: () -> Unit, onOpenGuide: () -> Unit) {
                 TextButton(
                     onClick = {
                         pending = null
-                        val message = Updater.downloadAndInstall(context, info)
-                        Toast.makeText(context, message, Toast.LENGTH_LONG).show()
+                        val opened = Updater.openReleasePage(context, info)
+                        Toast.makeText(
+                            context,
+                            if (opened) "已打开 Release 页面" else "没有可用的浏览器",
+                            Toast.LENGTH_SHORT,
+                        ).show()
                     },
-                ) { Text("下载并安装") }
+                ) { Text(stringResource(R.string.update_open_browser)) }
             },
             dismissButton = { TextButton(onClick = { pending = null }) { Text("稍后") } },
         )
@@ -959,9 +1119,22 @@ private fun Tag(text: String, modifier: Modifier = Modifier) {
     }
 }
 
-private fun hintText(snapshot: Snapshot, active: Boolean, remainingSeconds: Long?): String {
-    val timeout = remainingSeconds?.let { "；剩余 ${it / 60 + 1} 分钟自动还原" }.orEmpty()
+private fun hintText(
+    snapshot: Snapshot,
+    active: Boolean,
+    mode: ModeController.Mode,
+    remainingSeconds: Long?,
+): String {
+    val timeout = if (mode == ModeController.Mode.SESSION) {
+        remainingSeconds?.let { "；剩余 ${it / 60 + 1} 分钟自动还原" }.orEmpty()
+    } else {
+        ""
+    }
+    val ignored = snapshot.items.firstOrNull { it.writtenButIgnored }
     return when {
+        ignored != null -> "该 ROM 拦截了写入：${Keeper.hintFor(ignored.key)}"
+        active && snapshot.allOk && mode == ModeController.Mode.PERSISTENT ->
+            "常驻中：点「结束并还原设置」才会停止"
         active && snapshot.allOk -> "保持中：退出应用或划掉后台卡片会自动还原$timeout"
         active -> "正在恢复被关闭的设置…"
         !snapshot.hasPermission -> "先复制下方授权命令到电脑执行，再点上方按钮"

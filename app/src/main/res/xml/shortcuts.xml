@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="utf-8"?>
+<shortcuts xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <shortcut
+        android:enabled="true"
+        android:icon="@drawable/ic_stat_keeper"
+        android:shortcutId="start_session"
+        android:shortcutLongLabel="@string/shortcut_start_long"
+        android:shortcutShortLabel="@string/shortcut_start_short">
+        <intent
+            android:action="com.adbkeeper.action.START"
+            android:targetClass="com.adbkeeper.MainActivity"
+            android:targetPackage="com.adbkeeper" />
+        <categories android:name="android.shortcut.conversation" />
+    </shortcut>
+
+    <shortcut
+        android:enabled="true"
+        android:icon="@drawable/ic_stat_keeper"
+        android:shortcutId="stop_session"
+        android:shortcutLongLabel="@string/shortcut_stop_long"
+        android:shortcutShortLabel="@string/shortcut_stop_short">
+        <intent
+            android:action="com.adbkeeper.action.STOP"
+            android:targetClass="com.adbkeeper.MainActivity"
+            android:targetPackage="com.adbkeeper" />
+        <categories android:name="android.shortcut.conversation" />
+    </shortcut>
+</shortcuts>

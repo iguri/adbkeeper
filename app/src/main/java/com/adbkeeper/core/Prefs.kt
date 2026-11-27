@@ -15,6 +15,8 @@ object Prefs {
     private const val KEY_SESSION_ACTIVE = "session_active"
     private const val KEY_SESSION_STARTED = "session_started_at"
     private const val KEY_SESSION_LIMIT = "session_limit_minutes"
+    private const val KEY_MODE = "keep_mode"
+    private const val KEY_ONBOARDING_DONE = "onboarding_done"
     private const val KEY_ORIGINAL_PREFIX = "original_"
 
     private fun sp(context: Context): SharedPreferences =
@@ -68,6 +70,20 @@ object Prefs {
 
     fun setSessionLimitMinutes(context: Context, value: Int) {
         sp(context).edit().putInt(KEY_SESSION_LIMIT, value.coerceIn(0, 24 * 60)).apply()
+    }
+
+    /** 维持模式：session（即开即用）或 persistent（常驻）。 */
+    fun mode(context: Context): String = sp(context).getString(KEY_MODE, "session").orEmpty()
+
+    fun setMode(context: Context, value: String) {
+        sp(context).edit().putString(KEY_MODE, value).apply()
+    }
+
+    fun onboardingDone(context: Context): Boolean =
+        sp(context).getBoolean(KEY_ONBOARDING_DONE, false)
+
+    fun setOnboardingDone(context: Context, value: Boolean) {
+        sp(context).edit().putBoolean(KEY_ONBOARDING_DONE, value).apply()
     }
 
     /** 记录会话开始前的原始值（null 表示该项原本不存在）。 */
